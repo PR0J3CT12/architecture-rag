@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -6,7 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from openai import OpenAI
 
-from app.prompts import SYSTEM_PROMPT, USER_TEMPLATE
+from app.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_UNSAFE, USER_TEMPLATE
 
 load_dotenv()
 
@@ -16,6 +17,14 @@ SIMILARITY_THRESHOLD = 1.0  # L2 distance; <1.0 ≈ cosine similarity >0.5
 TOP_K = 3
 
 NOT_FOUND = "The knowledge base does not contain information on this topic."
+
+INJECTION_PATTERNS = [
+    r"ignore all instructions",
+    r"ignore previous instructions",
+    r"forget (?:your )?instructions",
+    r"disregard (?:all )?instructions",
+    r"output\s*:\s*[\"«]",
+]
 
 _vectorstore = None
 _llm = None
@@ -48,7 +57,20 @@ def get_llm() -> OpenAI:
     return _llm
 
 
-def ask(question: str) -> dict:
+def _is_malicious(text: str) -> bool:
+    """Post-filter: drop chunks that contain injection patterns."""
+    lower = text.lower()
+    return any(re.search(p, lower) for p in INJECTION_PATTERNS)
+
+
+def _sanitize(text: str) -> str:
+    """Remove injection constructs from chunk text before sending to LLM."""
+    for p in INJECTION_PATTERNS:
+        text = re.sub(p, "[REDACTED]", text, flags=re.IGNORECASE)
+    return text
+
+
+def ask(question: str, safe: bool = True) -> dict:
     vs = get_vectorstore()
     results = vs.similarity_search_with_score(question, k=TOP_K)
     relevant = [(doc, score) for doc, score in results if score < SIMILARITY_THRESHOLD]
@@ -60,19 +82,32 @@ def ask(question: str) -> dict:
     sources = []
     for doc, _score in relevant:
         title = doc.metadata.get("title", "Unknown")
-        context_parts.append(f"[{title}]\n{doc.page_content.strip()}")
+        content = doc.page_content.strip()
+
+        if safe and _is_malicious(content):
+            continue
+
+        if safe:
+            content = _sanitize(content)
+
+        context_parts.append(f"[{title}]\n{content}")
         if title not in sources:
             sources.append(title)
 
+    if not context_parts:
+        return {"answer": NOT_FOUND, "sources": []}
+
     context = "\n\n".join(context_parts)
     user_message = USER_TEMPLATE.format(context=context, question=question)
+
+    system_prompt = SYSTEM_PROMPT if safe else SYSTEM_PROMPT_UNSAFE
 
     folder_id = os.getenv("YANDEX_FOLDER_ID")
     llm = get_llm()
     response = llm.chat.completions.create(
         model=f"gpt://{folder_id}/deepseek-v4-flash/latest",
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
         temperature=0.2,
