@@ -23,7 +23,7 @@
 | Качество поиска | Хуже облачных — маленькая модель, плохо справляется со специализированными терминами | Хорошее, входит в топ MTEB-бенчмарка | Сопоставимо с OpenAI, тоже в топе MTEB |
 | Стоимость | Бесплатно — только ресурсы сервера | Платно за каждый токен | Бесплатно в рамках Gemini API |
 
-**Вывод:** Выбираю **Google text-embedding-004** — бесплатно, качество не хуже OpenAI, и уже в одной экосистеме с Gemini.
+**Вывод:** Выбираю **Google gemini-embedding-001** — бесплатно, качество не хуже OpenAI, и уже в одной экосистеме с Gemini.
 
 ---
 
@@ -44,7 +44,7 @@
 
 | # | LLM | Эмбеддинги | Векторная БД | Сервер | Когда подходит |
 |---|---|---|---|---|---|
-| A  | Gemini 1.5 Flash | Google text-embedding-004 | FAISS | 2 vCPU, 4 GB RAM, без GPU | MVP, быстрый старт, документация не секретная |
+| A  | Gemini 1.5 Flash | Google gemini-embedding-001 | FAISS | 2 vCPU, 4 GB RAM, без GPU | MVP, быстрый старт, документация не секретная |
 | B | Gemini 1.5 Flash | all-MiniLM-L6-v2 (локально) | FAISS | 4 vCPU, 8 GB RAM | Нужно чтобы документы не уходили наружу при индексации |
 | C | Mistral-7B (Ollama) | all-MiniLM-L6-v2 | FAISS | 8 vCPU, 32 GB RAM, GPU 16 GB | Полная приватность, SOC 2, данные клиентов не покидают периметр |
 | D | GPT-4o Enterprise | OpenAI text-embedding-3-large | Qdrant | EKS (уже есть в компании) | После успешного пилота, масштаб на всю компанию |
@@ -76,6 +76,35 @@
 ---
 
 ## Задание 3. Создание векторного индекса
+
+**Модель эмбеддингов:** `models/gemini-embedding-001` (Google) — бесплатна в рамках Gemini API.
+
+**Разбивка на чанки:** `RecursiveCharacterTextSplitter`, размер чанка — 2000 символов (~500 токенов), перекрытие — 200 символов. Сепараторы в порядке приоритета: двойной перенос строки, одиночный перенос, точка, пробел. Так чанки получаются семантически цельными — не рвут предложения на полуслове.
+
+**Метаданные каждого чанка:** `source` (путь к файлу), `title` (имя файла без расширения), `chunk_id` (порядковый номер).
+
+**Результат индексации:**
+- Документов: 39
+- Чанков: 818
+- Время генерации: ~795 с (ограничение бесплатного тира — 100 req/min, батчи по 80 с паузой 65 с)
+- Индекс сохранён: `faiss_index/`
+
+**Пример запроса к индексу:**
+
+```
+Q: What is the Void Core and what does it do?
+
+--- Chunk 1 [Void Core] ---
+Second Void Core
+
+--- Chunk 2 [Void Core] ---
+The first Void Core's hangars contain assault sGorrnles, blastboats, Strike cruisers, land vehicles, support ships, and 7,293 Shadow Darts. It is also protected by 10,000 turbolaser batteries, 2,600 ion cannons, and at least 768 Gravity snare projectors. Various sources state that the first Void Core has a diameter of between 140 and 160 kilometers. There is a broader range of figures for the seco
+
+--- Chunk 3 [Void Core] ---
+The second Void Core is featured on the cover of the book Chronoveil: Aftermath (2015), which also features many flashbacks to the destruction of the second Void Core, as well as the events directly after its destruction. One of the main characters in the story personally escaped the explosion of the Void Core. The destruction of the second Void Core was also shown in Lumigrams in the book. The 20
+```
+
+Поиск возвращает релевантные чанки из правильных документов — индекс работает корректно.
 
 ---
 
