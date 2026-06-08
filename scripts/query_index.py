@@ -1,11 +1,3 @@
-"""
-Load the saved FAISS index and run a search query.
-
-Usage:
-    python scripts/query_index.py "What is the Void Core?"
-    python scripts/query_index.py  # interactive mode
-"""
-
 import os
 import sys
 from pathlib import Path

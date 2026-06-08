@@ -1,14 +1,3 @@
-"""
-Task 3: Build FAISS vector index from the knowledge base.
-
-- Splits documents into chunks (~500 tokens / ~2000 chars each)
-- Generates embeddings via Google gemini-embedding-001
-- Saves FAISS index to faiss_index/
-
-Usage:
-    python scripts/build_index.py
-"""
-
 import os
 import time
 from pathlib import Path
