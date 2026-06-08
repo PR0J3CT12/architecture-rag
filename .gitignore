@@ -1,0 +1,14 @@
+venv/
+.venv/
+.env
+__pycache__/
+*.py[cod]
+*.pyo
+.idea/
+faiss_index/
+*.faiss
+*.pkl
+knowledge_base/raw/
+*.egg-info/
+dist/
+build/
